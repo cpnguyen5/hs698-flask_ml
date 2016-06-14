@@ -9,6 +9,12 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 from flask import url_for
 import os
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.cross_validation import train_test_split
+from sklearn.feature_selection import SelectKBest, chi2
+from sklearn import metrics, grid_search
+from sklearn.linear_model import LogisticRegression
 
 
 def get_abs_path():
@@ -26,9 +32,250 @@ def get_data():
                'adhesion', 'cell_size', 'bare_nuclei', 'bland_chromatin',
                'normal_nuclei', 'mitosis', 'class']
 
-    df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?')
+    conv= lambda x: 1 if int(x)==4 else 0
+    df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?', converters={10:conv})
     return df.dropna()
 
+
+def get_numpy(DataFrame):
+    """
+
+    :param DataFrame:
+    :return:
+    """
+    data = DataFrame.as_matrix()
+    return data
+
+
+def partition(data):
+    """
+
+    :param data:
+    :return:
+    """
+    # data = data.astype(np.float64)
+    data_train, data_test = train_test_split(data, random_state=2, test_size=0.30)
+
+    n_col = data.shape[1] - 1 #last index position
+    #Isolate features from outcomes/labels
+    X_train = data_train[:, 0:n_col] #training features
+    y_train = data_train[:, n_col] #training labels
+    X_test = data_test[:, 0:n_col] #testing features
+    y_test = data_test[:, n_col] #testing labels
+    return (X_train, X_test, y_train, y_test)
+
+
+def scale(X_train, X_test):
+    """
+
+    :param X_train:
+    :param X_test:
+    :return:
+    """
+    scaler = MinMaxScaler().fit(X_train) #scaler object fitted on training set of samples
+    scaled_X_train = scaler.transform(X_train) #transformed normalized data - Training set samples
+    scaled_X_test = scaler.transform(X_test) #transformed normalized data - Testing set samples
+    return (scaled_X_train, scaled_X_test)
+
+
+def feature_select(X_train, X_test, y_train, n_feat):
+    """
+
+    :param X_train:
+    :param X_test:
+    :param y_train:
+    :param n_feat:
+    :return:
+    """
+    # univariate feature selection
+    score_func = SelectKBest(chi2, k=n_feat).fit(X_train, y_train)  # k = # features
+
+    select_X_train = score_func.transform(X_train)  # transform feature selection/reduction on training set samples
+    select_X_test = score_func.transform(X_test)  # transform feature selection/reduction on testing set samples
+
+    score = score_func.scores_
+    pval = score_func.pvalues_
+    return (select_X_train, select_X_test, score, pval)
+
+
+def gridsearch(X_train, X_test, y_train):
+    # Setup Parameter Grid -- dictionary of parameters -- map parameter names to values to be searched
+    param_grid = [
+        {'C': [0.01, 0.1, 1, 10, 100, 1000], 'fit_intercept': [True, False], 'penalty': ['l2'], 'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag']},
+        {'C': [0.01, 0.1, 1, 10, 100, 1000], 'fit_intercept': [True, False], 'penalty': ['l1'], 'solver': ['liblinear']}
+    ]
+
+
+    # Create "blank" clf instance
+    blank_clf = LogisticRegression(random_state=2)
+
+    # Grid search to find "best" classifier -- Hyperparameters Optimization
+    clf = grid_search.GridSearchCV(blank_clf, param_grid, n_jobs=-1)  # classifier + optimal parameters
+    clf = clf.fit(X_train, y_train)  # fitted classifier -- Training Set
+    best_est = clf.best_estimator_
+    clf_pred = best_est.predict(X_test)  # apply classifier on test set for label predictions
+
+    best_params = clf.best_params_  # best parameters identified by grid search
+    score = clf.best_score_  # best grid score
+    return (best_est, clf_pred, best_params, score)
+
+
+def clf(X_train, X_test, y_train):
+    model = LogisticRegression()
+    model = model.fit(X_train, y_train) #Fit classifier to Training set
+    y_pred = model.predict(X_test) # Test classifier on Testing set
+    return (model, y_pred)
+
+
+def sensitivity(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function will calculate and return the sensitivity value of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: sensitivity value
+    """
+    y_pred = model_pred # prediction
+    y_true = target # true labels
+    #Confusion Matrix
+    cm = metrics.confusion_matrix(y_true, y_pred)
+    TN = float(cm[0,0]) #True Negative
+    FP = float(cm[0,1]) #False Positive
+    FN = float(cm[1,0]) #False Negative
+    TP = float(cm[1,1]) #True Positive
+
+    #sensitivity calculation
+    final_senstivity = TP/(TP + FN)
+    return final_senstivity
+
+
+def specificity(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function will calculate and return the specificity of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: specificity value
+    """
+    y_pred = model_pred #prediction
+    y_true = target #true labels
+    #Confusion Matrix
+    cm = metrics.confusion_matrix(y_true, y_pred)
+    TN = float(cm[0,0]) #True Negative
+    FP = float(cm[0,1]) #False Positive
+    FN = float(cm[1,0]) #False Negative
+    TP = float(cm[1,1]) #True Positive
+
+    #specificity calculation
+    N = FP + TN
+    TNR = TN/N
+    return TNR
+
+
+def accuracy(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function will calculate and return the accuracy value of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: accuracy value
+    """
+    accuracy = metrics.accuracy_score(target, model_pred)
+    return accuracy
+
+
+def f_score(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function calculates and returns the F1 score of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: F1-score value
+    """
+    y_pred = model_pred #prediction
+    y_true = target #true labels
+    f1 = metrics.f1_score(y_true, y_pred) #Computation of F1 score -- weighted average of precision & recall [0, 1]
+    return f1
+
+
+def precision(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function calculates and returns the precision value of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: precision value
+    """
+    y_pred = model_pred #prediction
+    y_true = target #true labels
+    precision_score = metrics.precision_score(y_true, y_pred) #precision calculation
+    return precision_score
+
+
+def recall(model_pred, target):
+    """
+    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    Given these inputs, the function calculates and returns the recall value of the classification as a float.
+
+    :param model_pred: classifier model's classification prediction
+    :param target: True target/labels (y_test)
+    :return: recall value
+    """
+    y_pred = model_pred #prediction
+    y_true = target #true labels
+    recall_score = metrics.recall_score(y_true, y_pred) #recall calculation
+    return recall_score
+
+
+def auc(model, X_test, target):
+    """
+    This function takes three parameters, the classifier model, testing set samples, and true targets/labels test set.
+    Given these inputs, the area under the (ROC) curve will be returned based on the decision function (y_score).
+
+    :param model: fitted classifier model
+    :param X_test: testing set samples/features
+    :param target: True target/labels (y_test)
+    :return: AUC score
+    """
+    y_true = target
+    y_score = model.decision_function(X_test) #Predict confidence scores
+    fpr, tpr, thresholds = metrics.roc_curve(y_true, y_score) #calculate FPR & TPR
+    auc_score = metrics.auc(fpr, tpr) #calculate area under the curve
+    return auc_score
+
+
+def plot_roc(model, X_test, target, n_features):
+    """
+    This function takes four parameters, the fitted classification model, samples test set, target/labels test set,
+    and number of features. Given these inputs, matplotlib will be used to plot the ROC curve of the classifier.
+    The function will return the figure of the plot.
+
+    :param model: fitted classification model
+    :param X_test: samples/features test set (X_test)
+    :param target: true target/labels (y_test)
+    :param n_features: int indicating number of features of data set
+    :return: Plot of ROC curve
+    """
+    y_true = target
+    y_score = model.decision_function(X_test)
+    fpr, tpr, thresholds = metrics.roc_curve(y_true, y_score)  # calculate FPR & TPR
+    auc_score = metrics.auc(fpr, tpr)  # calculate area under the curve
+
+    fig = plt.figure()
+    plt.plot(fpr, tpr, label='ROC curve (area = %0.3f)' % auc_score)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([-0.05, 1])
+    plt.ylim([0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.legend(loc="lower right")
+    plt.title('Receiver operating characteristic: \n (n_features = %d)' % (n_features))
+    return fig
 
 @app.route('/')
 def index():
@@ -102,34 +349,38 @@ def d3():
     return render_template('d3.html',
                            data_file=url_for('static',
                                              filename='tmp/kmeans.csv'))
-# def d3():
-#     df=get_data()
-#     X=df.ix[:, (df.columns != 'class') & (df.columns != 'code')].as_matrix() #as_matrix() pandas method to return data as matrix/np array
-#     y=df.ix[:, df.columns=='class'].as_matrix()
-#     #scale
-#     scaler =preprocessing.StandardScaler().fit(X)
-#     scaled=scaler.transform(X)
-#     #PCA
-#     pcomp=decomposition.PCA(n_components=2)
-#     pcomp.fit(scaled)
-#     components= pcomp.transform(scaled)
-#     var=pcomp.explained_variance_ratio_.sum() #View w/ Debug
-#     #KMeans
-#     model = KMeans(init='k-means++', n_clusters=2)
-#     model.fit(components)
-#     #Generate CSV
-#     cluster_data = pd.DataFrame(
-#         {'pc1': components[:,0],
-#          'pc2': components[:,1],
-#          'labels': model.labels_}
-#     ) #DF of PCA components
-#     # csv_path = os.path.join(get_abs_path(), 'static', 'tmp', 'cereal.csv')
-#     csv_path = os.path.join(get_abs_path(), 'static', 'tmp', 'kmeans.csv') #variable store path string with filename
-#     cluster_data.to_csv(csv_path) #generate of kmeans happens here
-#     return render_template(
-#         'd3.html', data_file=url_for('static', filename='tmp/kmeans.csv'))
 
 
+@app.route('/prediction')
+def prediction():
+    pd_df = get_data()
+    data = get_numpy(pd_df)
+    X_train, X_test, y_train, y_test = partition(data)
+    scaled_X_train, scaled_X_test = scale(X_train, X_test)
+    select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=4)
+    # best_est, clf_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
+    # best_est, clf_pred, best_params, score = gridsearch(scaled_X_train, scaled_X_test, y_train)
+    model, y_pred = clf(select_X_train, select_X_test, y_train)
+
+    sens = sensitivity(y_pred, y_test)
+    spec = specificity(y_pred, y_test)
+    prec = precision(y_pred, y_test)
+    rec = recall(y_pred, y_test)
+    area = auc(model, select_X_test, y_test)
+    # return sens, spec, prec, rec, area
+    # return area
+    # return best_est, best_params, score
+    # return best_est
+
+    fig=plot_roc(model, select_X_test, y_test, 4)
+
+    # Save fig
+    fig_path = os.path.join(get_abs_path(), 'static', 'tmp', 'roc.png')
+    fig.savefig(fig_path)
+    # return render_template('index.html', fig=fig_path)#render name of html file
+    return render_template('prediction.html',
+                           fig=url_for('static',
+                                       filename='tmp/roc.png'))
 
 
 @app.route('/head') #head - url
