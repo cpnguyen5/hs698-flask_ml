@@ -363,6 +363,7 @@ def d3():
                                              filename='tmp/kmeans.csv'))
 
 
+#Bonus: D3.js chart -- Grouped Bar Chart
 @app.route('/bar')
 def bar():
     df = get_data() #obtain DataFrame of data from CSV
@@ -436,6 +437,7 @@ def prediction():
                                        filename='tmp/roc.png'))
 
 
+#new API endpoint
 @app.route('/api/v1/prediction_confusion_matrix')
 def prediction_confusion_matrix():
     #Obtain data
