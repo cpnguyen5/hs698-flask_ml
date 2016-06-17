@@ -18,30 +18,35 @@ from sklearn.linear_model import LogisticRegression
 
 
 def get_abs_path():
+    """
+    This function takes no parameters and returns the api root directory pathway.
+    :return: api directory pathway
+    """
     return os.path.abspath(os.path.dirname(__file__))
 
 
 def get_data():
-    f_name = os.path.join(get_abs_path(), 'data', 'breast-cancer-wisconsin.csv')
-    # f_name = os.path.join(
-    #     os.path.abspath(os.path.dirname(__file__)),
-    #         'data',
-    #         'breast-cancer-wisconsin.csv'
-    #     )
+    """
+    This functions takes no parameters, reads in the CSV file and returns it as a pandas Data Frame. The function
+    drops any rows with missing values and converts the class into a binary classification (0, 1).
+    :return: pandas Data Frame
+    """
+    f_name = os.path.join(get_abs_path(), 'data', 'breast-cancer-wisconsin.csv') #path to CSV file
+    #Create pandas Data Frame from CSV
     columns = ['code', 'clump_thickness', 'size_uniformity', 'shape_uniformity',
                'adhesion', 'cell_size', 'bare_nuclei', 'bland_chromatin',
                'normal_nuclei', 'mitosis', 'class']
 
-    conv= lambda x: 1 if int(x)==4 else 0
+    conv= lambda x: 1 if int(x)==4 else 0 #converts class into binary ( 0:benign(2), 1: malignant(4) )
     df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?', converters={10:conv})
     return df.dropna()
 
 
 def get_numpy(DataFrame):
     """
-
-    :param DataFrame:
-    :return:
+    This function takes one parameter, a pandas DataFrame, and returns the object as a Numpy array.
+    :param DataFrame: pandas DataFrame of data
+    :return: Numpy array of data
     """
     data = DataFrame.as_matrix()
     return data
@@ -49,9 +54,10 @@ def get_numpy(DataFrame):
 
 def partition(data):
     """
-
-    :param data:
-    :return:
+    This function takes one parameter, a numpy array of data, and partitions the array into Train/Test sets. The function
+    will return a tuple of the partitioned data set.
+    :param data: numpy array of data
+    :return: tuple of partitioned data (X_train, X_test, y_train, y_test)
     """
     # data = data.astype(np.float64)
     data_train, data_test = train_test_split(data, random_state=2, test_size=0.30)
@@ -67,10 +73,11 @@ def partition(data):
 
 def scale(X_train, X_test):
     """
-
-    :param X_train:
-    :param X_test:
-    :return:
+    This function takes two parameters, the Training & Testing samples/features and returns the respective normalized/scaled
+    versions.
+    :param X_train: Training set samples
+    :param X_test: Testing set samples
+    :return: tuple of normalized/scaled Training & Testing sets samples
     """
     scaler = MinMaxScaler().fit(X_train) #scaler object fitted on training set of samples
     scaled_X_train = scaler.transform(X_train) #transformed normalized data - Training set samples
@@ -80,16 +87,18 @@ def scale(X_train, X_test):
 
 def feature_select(X_train, X_test, y_train, n_feat):
     """
-
-    :param X_train:
-    :param X_test:
-    :param y_train:
-    :param n_feat:
-    :return:
+    This function takes four parameters, numpy arrays of Training set samples, Testing set samples, training set labels,
+    and number of features to select/reduce to. The function will perform univariate feature selection using sklearn.feature_selection.SelectKBest
+    and a score function. The function will return a tuple of reduced Training set and Testing set samples as well as scores
+    and p-values.
+    :param X_train: Training set samples
+    :param X_test: Testing set samples
+    :param y_train: Training set labels
+    :param n_feat: number of features to select
+    :return: tuple of selected Training set samples, selected Testing set samples, scores, and p-values
     """
     # univariate feature selection
     score_func = SelectKBest(chi2, k=n_feat).fit(X_train, y_train)  # k = # features
-
     select_X_train = score_func.transform(X_train)  # transform feature selection/reduction on training set samples
     select_X_test = score_func.transform(X_test)  # transform feature selection/reduction on testing set samples
 
@@ -99,12 +108,21 @@ def feature_select(X_train, X_test, y_train, n_feat):
 
 
 def gridsearch(X_train, X_test, y_train):
+    """
+    This function takes three parameters, Training set samples, Testing set samples, and Training set labels. The function
+    will determine the optimal parameters of the best classifier model/estimator by performing a grid search. The best model
+    will be fitted with the Training set and subsequently applied on the Testing set for predictions.
+
+    :param X_train: Training set samples
+    :param X_test:  Testing set samples
+    :param y_train: Trainig set labels
+    :return: tuple of Best Classifier instance, Best Classifier predictions (y_pred), dictionary of optimal parameters, and grid score
+    """
     # Setup Parameter Grid -- dictionary of parameters -- map parameter names to values to be searched
     param_grid = [
         {'C': [0.01, 0.1, 1, 10, 100, 1000], 'fit_intercept': [True, False], 'penalty': ['l2'], 'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag']},
         {'C': [0.01, 0.1, 1, 10, 100, 1000], 'fit_intercept': [True, False], 'penalty': ['l1'], 'solver': ['liblinear']}
     ]
-
 
     # Create "blank" clf instance
     blank_clf = LogisticRegression(random_state=2)
@@ -121,8 +139,17 @@ def gridsearch(X_train, X_test, y_train):
 
 
 def clf(X_train, X_test, y_train):
+    """
+    This function takes three parameters, Training set samples, Testing set samples, and Training set labels. The function
+    serves as a convenience function and instantiates the model with optimal parameters (previously identified by a grid search).
+    The classifier model is applied on the Testing set for classification preductions.
+
+    :param X_train: Training set samples
+    :param X_test:  Testing set samples
+    :param y_train: Training set labels
+    :return: tuple of fitted classifier instance and classifier predictions (y_pred)
+    """
     model = LogisticRegression(penalty= 'l2', C= 1, solver= 'liblinear', fit_intercept= True) #best param determined by gridsearch
-    # model = svm.SVC()
     model = model.fit(X_train, y_train) #Fit classifier to Training set
     y_pred = model.predict(X_test) # Test classifier on Testing set
     return (model, y_pred)
@@ -130,7 +157,7 @@ def clf(X_train, X_test, y_train):
 
 def sensitivity(model_pred, target):
     """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    This function takes two parameters, numpy array of the model's classification prediction and true target/labels.
     Given these inputs, the function will calculate and return the sensitivity value of the classification as a float.
 
     :param model_pred: classifier model's classification prediction
@@ -153,7 +180,7 @@ def sensitivity(model_pred, target):
 
 def specificity(model_pred, target):
     """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    This function takes two parameters, numpy array of the model's classification prediction and true target/labels.
     Given these inputs, the function will calculate and return the specificity of the classification as a float.
 
     :param model_pred: classifier model's classification prediction
@@ -177,7 +204,7 @@ def specificity(model_pred, target):
 
 def accuracy(model_pred, target):
     """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    This function takes two parameters, numpy array of the model's classification prediction and true target/labels.
     Given these inputs, the function will calculate and return the accuracy value of the classification as a float.
 
     :param model_pred: classifier model's classification prediction
@@ -190,7 +217,7 @@ def accuracy(model_pred, target):
 
 def precision(model_pred, target):
     """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    This function takes two parameters, numpy array of the model's classification prediction and true target/labels.
     Given these inputs, the function calculates and returns the precision value of the classification as a float.
 
     :param model_pred: classifier model's classification prediction
@@ -205,7 +232,7 @@ def precision(model_pred, target):
 
 def recall(model_pred, target):
     """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
+    This function takes two parameters, numpy array of the model's classification prediction and true target/labels.
     Given these inputs, the function calculates and returns the recall value of the classification as a float.
 
     :param model_pred: classifier model's classification prediction
@@ -224,7 +251,7 @@ def auc(model, X_test, target):
     Given these inputs, the area under the (ROC) curve will be returned based on the decision function (y_score).
 
     :param model: fitted classifier model
-    :param X_test: testing set samples/features
+    :param X_test: testing set samples
     :param target: True target/labels (y_test)
     :return: AUC score
     """
@@ -237,12 +264,12 @@ def auc(model, X_test, target):
 
 def plot_roc(model, X_test, target, n_features):
     """
-    This function takes four parameters, the fitted classification model, samples test set, target/labels test set,
+    This function takes four parameters, the fitted classification model, Testing set samples, target/labels test set,
     and number of features. Given these inputs, matplotlib will be used to plot the ROC curve of the classifier.
     The function will return the figure of the plot.
 
     :param model: fitted classification model
-    :param X_test: samples/features test set (X_test)
+    :param X_test: Testing set samples
     :param target: true target/labels (y_test)
     :param n_features: int indicating number of features of data set
     :return: Plot of ROC curve
@@ -260,14 +287,12 @@ def plot_roc(model, X_test, target, n_features):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.legend(loc="lower right")
-    plt.title('Receiver operating characteristic: \n (n_features = %d)' % (n_features))
+    plt.title('Receiver operating characteristic: \n (n_features selected= %d)' % (n_features))
     return fig
 
 
 @app.route('/')
 def index():
-    # b=2
-    # return "Hello, I'm an API!"
     df=get_data()
     X=df.ix[:, (df.columns != 'class') & (df.columns != 'code')].as_matrix() #as_matrix() pandas method to return data as matrix/np array
     y=df.ix[:, df.columns=='class'].as_matrix()
@@ -314,7 +339,7 @@ def index():
 @app.route('/d3')
 def d3():
     df = get_data()
-    X = df.ix[:, (df.columns != 'class') & (df.columns != 'code')].as_matrix() #as_matrix() pandas method to return data as matrix/np array
+    X = df.ix[:, (df.columns != 'class') & (df.columns != 'code')].as_matrix()
     y = df.ix[:, df.columns == 'class'].as_matrix()
     # Scale
     scaler = preprocessing.StandardScaler().fit(X)
@@ -337,58 +362,56 @@ def d3():
                            data_file=url_for('static',
                                              filename='tmp/kmeans.csv'))
 
+
 @app.route('/bar')
 def bar():
-
-
-    # conv= lambda x: "malignant" if int(x)==4 else "benign"
-    # df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?', converters={10:conv})
-    df = get_data()
-    data = df.ix[:, df.columns != 'code'].as_matrix()
+    df = get_data() #obtain DataFrame of data from CSV
+    data = df.ix[:, df.columns != 'code'].as_matrix() #convert DataFrame to Numpy array
+    #Filter data by class labels
     cls = data[:, -1]
     class_0 = data[cls==0]
     class_1 = data[cls==1]
+    #Calculate Average for each Descriptor -- Grouped by classification
     avg_0 = np.average(class_0, axis=0)
     avg_1 = np.average(class_1, axis=0)
     avg_data = np.vstack((avg_0, avg_1))
-    avg_data = avg_data.transpose()
-    X = avg_data[:-1,:]
-    y = avg_data[-1,:]
+    avg_data = avg_data.transpose() #tranpose data
+    #Isolate Features from Outcomes
+    X = avg_data[:-1,:] #features
+    y = avg_data[-1,:] #outcomes
+    #Create array for plot labelling purposes
     descriptors = np.array(['clump_thickness', 'size_uniformity', 'shape_uniformity',
                'adhesion', 'cell_size', 'bare_nuclei', 'bland_chromatin',
                'normal_nuclei', 'mitosis']).transpose()
+    #Create pandas DataFrame from Numpy array
     class_df = pd.DataFrame({'benign': X[:, 0],
                              'malignant': X[:, 1],
                              'descriptors': descriptors})
 
-    # class_df = pd.DataFrame({'label':avg_data[:,9],
-    #                          'clump_thickness':avg_data[:,0],
-    #                          'size_uniformity':avg_data[:,1],
-    #                          'shape_uniformity':avg_data[:,2],
-    #                          'adhesion':avg_data[:,3],
-    #                          'cell_size':avg_data[:,4],
-    #                          'bare_nuclei':avg_data[:,5],
-    #                          'bland_chromatin':avg_data[:,6],
-    #                          'normal_nuclei':avg_data[:,7],
-    #                          'mitosis':avg_data[:,8]})
-
-    bar_path = os.path.join(get_abs_path(), 'static', 'tmp', 'breast_cancer_bar.csv')
-    class_df.to_csv(bar_path, index=False)
+    bar_path = os.path.join(get_abs_path(), 'static', 'tmp', 'breast_cancer_bar.csv') #save new CSV file at bar_path
+    class_df.to_csv(bar_path, index=False) #DataFrame to CSV file in static/tmp
     return render_template('bar.html', d_file=url_for('static',
                                                filename='tmp/breast_cancer_bar.csv'))
 
 
 @app.route('/prediction')
 def prediction():
-    pd_df = get_data()
-    data = get_numpy(pd_df)
+    #Obtain data
+    pd_df = get_data() #obtain DataFrame of data from CSV
+    data = get_numpy(pd_df) #convert DataFrame to Numpy array
+
+    #Partition Data into Train-Test sets (70/30)
     X_train, X_test, y_train, y_test = partition(data)
+    #Scale/Normalize Data
     scaled_X_train, scaled_X_test = scale(X_train, X_test)
+    #Feature Selection - n_features=6
     select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=6)
 
+    #Classifier Model
     best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
     model = best_est
-    # model, y_pred = clf(select_X_train, select_X_test, y_train)
+    # model, y_pred = clf(select_X_train, select_X_test, y_train) #convenience clf instantiation -- after grid search
+    #Metrics
     # acc = accuracy(y_pred, y_test)
     # sens = sensitivity(y_pred, y_test)
     # spec = specificity(y_pred, y_test)
@@ -397,14 +420,16 @@ def prediction():
     # area = auc(model, select_X_test, y_test)
     # print acc, sens, spec, prec, rec, area
 
+    #Pass Variable to prediction_confusion_matrix -- flask.session
     # cm=metrics.confusion_matrix(y_test, y_pred)
     # cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
     # session['cm'] = cm_dict
 
+    #Plot ROC Curve
     fig=plot_roc(model, select_X_test, y_test, 6)
 
     # Save fig
-    fig_path = os.path.join(get_abs_path(), 'static', 'tmp', 'roc.png')
+    fig_path = os.path.join(get_abs_path(), 'static', 'tmp', 'roc.png') #path to save fig
     fig.savefig(fig_path)
     return render_template('prediction.html',
                            fig=url_for('static',
@@ -413,19 +438,26 @@ def prediction():
 
 @app.route('/api/v1/prediction_confusion_matrix')
 def prediction_confusion_matrix():
+    #Obtain data
+    pd_df = get_data() #DataFrame
+    data = get_numpy(pd_df) #convert to Numpy array
 
-    pd_df = get_data()
-    data = get_numpy(pd_df)
+    #Partition Data into Train-Test sets (70/30)
     X_train, X_test, y_train, y_test = partition(data)
+    #Scale/Normalize Data
     scaled_X_train, scaled_X_test = scale(X_train, X_test)
+    #Feature Selection - n_features=6
     select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=6)
+
+    #Classifier Model
     best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
     model = best_est
-    cm=metrics.confusion_matrix(y_test, y_pred)
-    cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
 
-    # cm_dict = session.pop('cm')
-    model_cm = {'logistic regression': cm_dict}
+    #Confusion Matrix
+    cm=metrics.confusion_matrix(y_test, y_pred) #confusion matrix
+    cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]} #dictionary of confusion matrix key-value pairs
+    # cm_dict = session.pop('cm') #retrieve passed variables between routes
+    model_cm = {'logistic regression': cm_dict} #key-value pair between model and dict of confusion matrix -- to JSON
     return jsonify(model_cm)
 
 
@@ -435,5 +467,4 @@ def head(): #head - function to access url
     data = json.loads(df.to_json()) #exports data frame as json string --> load/parsed json into python object (dict or lsit)
     return jsonify(data)
 
-
-app.secret_key = 'secret!key'
+# app.secret_key = 'secret!key' #flask/session
