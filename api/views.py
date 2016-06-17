@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cross_validation import train_test_split
 from sklearn.feature_selection import SelectKBest, chi2
-from sklearn import metrics, grid_search
+from sklearn import metrics, grid_search, svm
 from sklearn.linear_model import LogisticRegression
 
 
@@ -121,7 +121,8 @@ def gridsearch(X_train, X_test, y_train):
 
 
 def clf(X_train, X_test, y_train):
-    model = LogisticRegression()
+    model = LogisticRegression(penalty= 'l2', C= 1, solver= 'liblinear', fit_intercept= True) #best param determined by gridsearch
+    # model = svm.SVC()
     model = model.fit(X_train, y_train) #Fit classifier to Training set
     y_pred = model.predict(X_test) # Test classifier on Testing set
     return (model, y_pred)
@@ -262,6 +263,7 @@ def plot_roc(model, X_test, target, n_features):
     plt.title('Receiver operating characteristic: \n (n_features = %d)' % (n_features))
     return fig
 
+
 @app.route('/')
 def index():
     # b=2
@@ -335,6 +337,36 @@ def d3():
                            data_file=url_for('static',
                                              filename='tmp/kmeans.csv'))
 
+@app.route('/bar')
+def bar():
+
+
+    # conv= lambda x: "malignant" if int(x)==4 else "benign"
+    # df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?', converters={10:conv})
+    df = get_data()
+    data = df.ix[:, df.columns != 'code'].as_matrix()
+    label = data[:, -1]
+    class_0 = data[label==0]
+    class_1 = data[label==1]
+    avg_0 = np.average(class_0, axis=0)
+    avg_1 = np.average(class_1, axis=0)
+    avg_data = np.vstack((avg_0, avg_1))
+    class_df = pd.DataFrame({'label':avg_data[:,9],
+                             'clump_thickness':avg_data[:,0],
+                             'size_uniformity':avg_data[:,1],
+                             'shape_uniformity':avg_data[:,2],
+                             'adhesion':avg_data[:,3],
+                             'cell_size':avg_data[:,4],
+                             'bare_nuclei':avg_data[:,5],
+                             'bland_chromatin':avg_data[:,6],
+                             'normal_nuclei':avg_data[:,7],
+                             'mitosis':avg_data[:,8]})
+
+    bar_path = os.path.join(get_abs_path(), 'static', 'tmp', 'breast_cancer_bar.csv')
+    class_df.to_csv(bar_path)
+    return render_template('bar.html', d_file=url_for('static',
+                                               filename='tmp/breast_cancer_bar.csv'))
+
 
 @app.route('/prediction')
 def prediction():
@@ -343,49 +375,47 @@ def prediction():
     X_train, X_test, y_train, y_test = partition(data)
     scaled_X_train, scaled_X_test = scale(X_train, X_test)
     select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=6)
-    # best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
-    model, y_pred = clf(select_X_train, select_X_test, y_train)
-    # session['clf_pred'] = y_pred
-    # session['target'] = y_test
-    # model = best_est
-    sens = sensitivity(y_pred, y_test)
-    spec = specificity(y_pred, y_test)
-    prec = precision(y_pred, y_test)
-    rec = recall(y_pred, y_test)
-    area = auc(model, select_X_test, y_test)
-    cm=metrics.confusion_matrix(y_test, y_pred)
-    cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
-    session['cm'] = cm_dict
-    # return sens, spec, prec, rec, area
-    # return area
-    # return best_est, best_params, score
-    # return best_est
+
+    best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
+    model = best_est
+    # model, y_pred = clf(select_X_train, select_X_test, y_train)
+    # acc = accuracy(y_pred, y_test)
+    # sens = sensitivity(y_pred, y_test)
+    # spec = specificity(y_pred, y_test)
+    # prec = precision(y_pred, y_test)
+    # rec = recall(y_pred, y_test)
+    # area = auc(model, select_X_test, y_test)
+    # print acc, sens, spec, prec, rec, area
+
+    # cm=metrics.confusion_matrix(y_test, y_pred)
+    # cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
+    # session['cm'] = cm_dict
 
     fig=plot_roc(model, select_X_test, y_test, 6)
 
     # Save fig
     fig_path = os.path.join(get_abs_path(), 'static', 'tmp', 'roc.png')
     fig.savefig(fig_path)
-    # return render_template('index.html', fig=fig_path)#render name of html file
     return render_template('prediction.html',
                            fig=url_for('static',
                                        filename='tmp/roc.png'))
 
-# print prediction()
 
-
-@app.route('/prediction_confusion_matrix')
+@app.route('/api/v1/prediction_confusion_matrix')
 def prediction_confusion_matrix():
-    # y_pred = session.get('clf_pred')
-    # y_true = session.get('target')
-    # cm = metrics.confusion_matrix(y_true, y_pred)
-    com = session.pop('cm')
-    # TN = float(cm[0,0]) #True Negative
-    # FP = float(cm[0,1]) #False Positive
-    # FN = float(cm[1,0]) #False Negative
-    # TP = float(cm[1,1]) #True Positive
-    # cm_dict = {'fp': com[0,1], 'tp': com[1,1], 'fn': com[1,0], 'tn': com[0,0]}
-    model_cm = {'logistic regression': com}
+
+    pd_df = get_data()
+    data = get_numpy(pd_df)
+    X_train, X_test, y_train, y_test = partition(data)
+    scaled_X_train, scaled_X_test = scale(X_train, X_test)
+    select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=6)
+    best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
+    model = best_est
+    cm=metrics.confusion_matrix(y_test, y_pred)
+    cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
+
+    # cm_dict = session.pop('cm')
+    model_cm = {'logistic regression': cm_dict}
     return jsonify(model_cm)
 
 
@@ -395,7 +425,5 @@ def head(): #head - function to access url
     data = json.loads(df.to_json()) #exports data frame as json string --> load/parsed json into python object (dict or lsit)
     return jsonify(data)
 
-# y_pred, y_test = prediction()[1:]
-# prediction_confusion_matrix(y_pred, y_test)
 
 app.secret_key = 'secret!key'
