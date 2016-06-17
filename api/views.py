@@ -1,7 +1,7 @@
 from api import app
 import pandas as pd
 import json
-from flask import jsonify
+from flask import jsonify, session
 from flask import render_template
 from sklearn import preprocessing
 from sklearn import decomposition
@@ -187,21 +187,6 @@ def accuracy(model_pred, target):
     return accuracy
 
 
-def f_score(model_pred, target):
-    """
-    This function takes two parameters, arrays of the model's classification prediction and true target/labels.
-    Given these inputs, the function calculates and returns the F1 score of the classification as a float.
-
-    :param model_pred: classifier model's classification prediction
-    :param target: True target/labels (y_test)
-    :return: F1-score value
-    """
-    y_pred = model_pred #prediction
-    y_true = target #true labels
-    f1 = metrics.f1_score(y_true, y_pred) #Computation of F1 score -- weighted average of precision & recall [0, 1]
-    return f1
-
-
 def precision(model_pred, target):
     """
     This function takes two parameters, arrays of the model's classification prediction and true target/labels.
@@ -357,22 +342,26 @@ def prediction():
     data = get_numpy(pd_df)
     X_train, X_test, y_train, y_test = partition(data)
     scaled_X_train, scaled_X_test = scale(X_train, X_test)
-    select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=4)
-    # best_est, clf_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
-    # best_est, clf_pred, best_params, score = gridsearch(scaled_X_train, scaled_X_test, y_train)
+    select_X_train, select_X_test, score, pval = feature_select(scaled_X_train, scaled_X_test, y_train, n_feat=6)
+    # best_est, y_pred, best_params, score = gridsearch(select_X_train, select_X_test, y_train)
     model, y_pred = clf(select_X_train, select_X_test, y_train)
-
+    # session['clf_pred'] = y_pred
+    # session['target'] = y_test
+    # model = best_est
     sens = sensitivity(y_pred, y_test)
     spec = specificity(y_pred, y_test)
     prec = precision(y_pred, y_test)
     rec = recall(y_pred, y_test)
     area = auc(model, select_X_test, y_test)
+    cm=metrics.confusion_matrix(y_test, y_pred)
+    cm_dict = {'fp': cm[0,1], 'tp': cm[1,1], 'fn': cm[1,0], 'tn': cm[0,0]}
+    session['cm'] = cm_dict
     # return sens, spec, prec, rec, area
     # return area
     # return best_est, best_params, score
     # return best_est
 
-    fig=plot_roc(model, select_X_test, y_test, 4)
+    fig=plot_roc(model, select_X_test, y_test, 6)
 
     # Save fig
     fig_path = os.path.join(get_abs_path(), 'static', 'tmp', 'roc.png')
@@ -382,10 +371,31 @@ def prediction():
                            fig=url_for('static',
                                        filename='tmp/roc.png'))
 
+# print prediction()
+
+
+@app.route('/prediction_confusion_matrix')
+def prediction_confusion_matrix():
+    # y_pred = session.get('clf_pred')
+    # y_true = session.get('target')
+    # cm = metrics.confusion_matrix(y_true, y_pred)
+    com = session.pop('cm')
+    # TN = float(cm[0,0]) #True Negative
+    # FP = float(cm[0,1]) #False Positive
+    # FN = float(cm[1,0]) #False Negative
+    # TP = float(cm[1,1]) #True Positive
+    # cm_dict = {'fp': com[0,1], 'tp': com[1,1], 'fn': com[1,0], 'tn': com[0,0]}
+    model_cm = {'logistic regression': com}
+    return jsonify(model_cm)
+
 
 @app.route('/head') #head - url
 def head(): #head - function to access url
     df = get_data().head() #head - dataframe
-    data = json.loads(df.to_json()) #exports data frame as string --> data is python object containing it with loads
+    data = json.loads(df.to_json()) #exports data frame as json string --> load/parsed json into python object (dict or lsit)
     return jsonify(data)
 
+# y_pred, y_test = prediction()[1:]
+# prediction_confusion_matrix(y_pred, y_test)
+
+app.secret_key = 'secret!key'
