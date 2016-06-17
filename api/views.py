@@ -345,25 +345,35 @@ def bar():
     # df = pd.read_csv(f_name, sep=',', header=None, names=columns, na_values='?', converters={10:conv})
     df = get_data()
     data = df.ix[:, df.columns != 'code'].as_matrix()
-    label = data[:, -1]
-    class_0 = data[label==0]
-    class_1 = data[label==1]
+    cls = data[:, -1]
+    class_0 = data[cls==0]
+    class_1 = data[cls==1]
     avg_0 = np.average(class_0, axis=0)
     avg_1 = np.average(class_1, axis=0)
     avg_data = np.vstack((avg_0, avg_1))
-    class_df = pd.DataFrame({'label':avg_data[:,9],
-                             'clump_thickness':avg_data[:,0],
-                             'size_uniformity':avg_data[:,1],
-                             'shape_uniformity':avg_data[:,2],
-                             'adhesion':avg_data[:,3],
-                             'cell_size':avg_data[:,4],
-                             'bare_nuclei':avg_data[:,5],
-                             'bland_chromatin':avg_data[:,6],
-                             'normal_nuclei':avg_data[:,7],
-                             'mitosis':avg_data[:,8]})
+    avg_data = avg_data.transpose()
+    X = avg_data[:-1,:]
+    y = avg_data[-1,:]
+    descriptors = np.array(['clump_thickness', 'size_uniformity', 'shape_uniformity',
+               'adhesion', 'cell_size', 'bare_nuclei', 'bland_chromatin',
+               'normal_nuclei', 'mitosis']).transpose()
+    class_df = pd.DataFrame({'benign': X[:, 0],
+                             'malignant': X[:, 1],
+                             'descriptors': descriptors})
+
+    # class_df = pd.DataFrame({'label':avg_data[:,9],
+    #                          'clump_thickness':avg_data[:,0],
+    #                          'size_uniformity':avg_data[:,1],
+    #                          'shape_uniformity':avg_data[:,2],
+    #                          'adhesion':avg_data[:,3],
+    #                          'cell_size':avg_data[:,4],
+    #                          'bare_nuclei':avg_data[:,5],
+    #                          'bland_chromatin':avg_data[:,6],
+    #                          'normal_nuclei':avg_data[:,7],
+    #                          'mitosis':avg_data[:,8]})
 
     bar_path = os.path.join(get_abs_path(), 'static', 'tmp', 'breast_cancer_bar.csv')
-    class_df.to_csv(bar_path)
+    class_df.to_csv(bar_path, index=False)
     return render_template('bar.html', d_file=url_for('static',
                                                filename='tmp/breast_cancer_bar.csv'))
 
